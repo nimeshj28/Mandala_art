@@ -18,16 +18,16 @@ if 'show_sidebar' not in st.session_state:
 # --- CSS Styling ---
 st.markdown("""
     <style>
-    body { background-color: #f6f7fb; }
     .stApp {
-        background: linear-gradient(to right, #f1f5f9, #e3f2fd);
+        background: linear-gradient(135deg, #f2f5f9, #dfe9f3);
         font-family: 'Segoe UI', sans-serif;
     }
     textarea, input[type="text"], input[type="number"] {
-        background-color: #ffffff !important;
-        color: #111 !important;
+        background-color: #fff5e5 !important;
+        color: #222 !important;
         border-radius: 10px;
         font-weight: 500;
+        padding: 10px;
     }
     .mandala-img-container {
         position: relative;
@@ -80,14 +80,15 @@ def generate_mandala_image(emotion, age, api_key):
     return image, image_url
 
 def get_caption(age, emotion):
+    emotion = emotion.lower()
     templates = {
-        "happy": f"At age {age}, happiness feels like sweet wind in the best climate — this mandala radiates balance from every direction.",
-        "engaged": f"Age {age} with an engaged mind — petals rooted in purpose, showing a responsible soul anchoring life's leaves.",
-        "curious": f"{age} and curious — this mandala swirls like questions echoing in a hungry mind.",
-        "peaceful": f"{age} years of peace — symmetry like still waters, calm and quietly wise.",
-        "tired": f"Feeling tired at {age}? This mandala holds soft repetition, reflecting the weight and rhythm of effort."
+        "happy": f"Age {age} and happy — a sweet wind in the best climate! This mandala reflects balance and prosperity flowing from all four directions.",
+        "engaged": f"Age {age} and engaged — taking care of what matters. This mandala’s petals show strong, mature roots anchoring life's leaves.",
+        "curious": f"Curious at {age}? This mandala spirals like your questions — expanding, searching, blooming with ideas.",
+        "peaceful": f"{age} and peaceful — symmetry whispers stillness. Every ring is a breath, every line a pause.",
+        "tired": f"Tired at {age}? This mandala is rhythmic and soft, reflecting your energy trying to stay centered through the waves."
     }
-    return templates.get(emotion.lower(), f"This art reflects how a {age}-year-old feeling {emotion} uniquely blooms — patterns mirroring your vibe.")
+    return templates.get(emotion, f"This mandala blooms with your unique vibe — a reflection of being {age} and feeling {emotion}.")
 
 def get_image_download_button(img, filename):
     buf = io.BytesIO()
@@ -101,7 +102,7 @@ def get_image_download_button(img, filename):
         key=f"download_{filename}"
     )
 
-# --- Left Sidebar (Chat-like) ---
+# --- Sidebar: Chat History ---
 with st.sidebar:
     st.markdown("### 🧾 Your Mandala Gallery")
     if st.button("🔽 Toggle Chat History"):
@@ -110,15 +111,15 @@ with st.sidebar:
     if st.session_state.show_sidebar:
         for i, item in enumerate(reversed(st.session_state.mandala_history)):
             tag = f"{item['age']} • {item['emotion'].capitalize()}"
-            st.image(item['image'].resize((60, 60)), caption=tag, use_column_width=False)
+            st.image(item['image'].resize((60, 60)), caption=tag, use_container_width=False)
             if st.button(f"🗂️ {tag}", key=f"view_{i}"):
                 st.session_state.selected = len(st.session_state.mandala_history) - 1 - i
 
-# --- Centered Input Layout ---
+# --- Center Panel: Input ---
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     st.markdown("## 🎨 Mandala Brew")
-    st.markdown("Let’s vibe and draw your soul ✨")
+    st.markdown("Let’s vibe & sketch your soul ✨")
 
     api_key = st.text_input("🔐 Your OpenAI API Key", type="password", placeholder="Paste here")
     age = st.number_input("🎂 Your Age", min_value=5, max_value=100, step=1)
@@ -131,7 +132,6 @@ with col2:
                 img, url = generate_mandala_image(emotion, age, api_key)
                 caption = get_caption(age, emotion)
 
-                # Save to history
                 st.session_state.api_call_count += 1
                 st.session_state.mandala_history.append({
                     "age": age,
@@ -145,15 +145,14 @@ with col2:
         else:
             st.warning("Please enter all fields.")
 
-# --- Main Display: Most Recent Mandala ---
+# --- Mandala Output Display ---
 if st.session_state.mandala_history:
     last = st.session_state.mandala_history[-1]
     st.markdown(f"### 🧘 Mandala for Age {last['age']} — {last['emotion'].capitalize()}")
 
     with st.container():
-        # Art + Download button overlay
         col = st.columns([1, 6, 1])[1]
         with col:
-            st.image(last['image'], use_column_width=True)
+            st.image(last['image'], use_container_width=True)
             get_image_download_button(last['image'], filename="your_mandala.png")
             st.markdown(f"<div class='caption'>{last['caption']}</div>", unsafe_allow_html=True)
