@@ -1,117 +1,135 @@
 import streamlit as st
-import requests
-from PIL import Image
-from io import BytesIO
+import openai
 import base64
-import random
+import requests
+from io import BytesIO
+from PIL import Image
+import os
 
-# ------------------ Config ------------------
-st.set_page_config(page_title="Mandala by Mood", layout="wide", initial_sidebar_state="expanded")
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Mandala Mood Brewer", layout="wide", page_icon="🌀")
 
-st.markdown("""
+# --- STYLES ---
+custom_css = """
 <style>
 body {
-    background: linear-gradient(135deg, #23074d 0%, #cc5333 100%);
-    color: white;
+    background-color: #f8f0ff;
     font-family: 'Segoe UI', sans-serif;
 }
-.stTextInput input, .stTextArea textarea {
-    background-color: #3c3f58;
-    color: white;
+input, textarea {
+    background-color: #fff9f5 !important;
+    color: #333 !important;
+}
+.stTextInput input, .stNumberInput input {
     border-radius: 8px;
+    padding: 10px;
     font-size: 16px;
 }
 .stButton>button {
-    background-color: #f72585;
+    background-color: #6a0dad;
     color: white;
     font-weight: bold;
+    border-radius: 10px;
+    padding: 10px 24px;
     font-size: 18px;
-    border-radius: 12px;
-    padding: 0.6em 1.2em;
 }
-[data-testid="collapsedControl"] {
-    color: white;
+.stButton>button:hover {
+    background-color: #8a2be2;
+}
+.download-icon {
+    display: block;
+    text-align: center;
+    margin-top: 5px;
+}
+.expander-header {
+    font-weight: bold;
+    font-size: 18px;
+    color: #5e4b8b;
 }
 </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(custom_css, unsafe_allow_html=True)
 
-# ------------------ Setup ------------------
+# --- SIDEBAR HISTORY ---
+st.sidebar.title("🗂️ Your Mandala History")
+
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-# ------------------ Sidebar ------------------
-with st.sidebar:
-    st.header("🎒 Your Mandala Journey")
-    if st.session_state.history:
-        for i, (prompt, img_url, desc) in enumerate(reversed(st.session_state.history)):
-            with st.expander(f"🌀 Mandala #{len(st.session_state.history) - i}: {prompt[:25]}"):
-                st.image(img_url, caption=desc, use_container_width=True)
-                # Download Button
-                response = requests.get(img_url)
-                img_bytes = BytesIO(response.content)
-                b64 = base64.b64encode(img_bytes.getvalue()).decode()
-                dl_link = f'<a href="data:image/png;base64,{b64}" download="mandala.png">💾 Download</a>'
-                st.markdown(dl_link, unsafe_allow_html=True)
+for i, entry in enumerate(reversed(st.session_state.history)):
+    with st.sidebar.expander(f"🌟 Age {entry['age']} – {entry['emotion'].capitalize()}", expanded=False):
+        st.image(entry['image'], use_column_width=True)
+        st.caption(entry['caption'])
+
+# --- MAIN UI ---
+st.title("🎨 Mandala Mood Brewer")
+st.subheader("Drop your vibes, and let's brew some cosmic art!")
+
+# --- INPUTS ---
+with st.form("mandala_form"):
+    api_key = st.text_input("🔑 Drop your OpenAI API key here (we don't store it)", type="password")
+    emotion = st.text_input("🧠 What’s your current mood?", max_chars=30)
+    age = st.number_input("📅 How young are you feeling today?", min_value=1, max_value=120, step=1)
+    submitted = st.form_submit_button("✨ Let's Brew")
+
+# --- UTILITIES ---
+def generate_mandala_image(emotion, age, api_key):
+    prompt = f"Black and white mandala art inspired by a {age}-year-old person feeling {emotion}. Artistic, elegant, intricate, symmetric, circular, hand-drawn style. No text, no watermark, no background, only art."
+    openai.api_key = api_key
+
+    response = openai.Image.create(
+        prompt=prompt,
+        n=1,
+        size="512x512"
+    )
+    image_url = response['data'][0]['url']
+    image = Image.open(requests.get(image_url, stream=True).raw)
+    return image, image_url
+
+def get_caption(emotion, age):
+    if age < 18:
+        tone = "playful and full of energy"
+    elif 18 <= age <= 30:
+        tone = "exploring the world, balancing ambition and joy"
+    elif 31 <= age <= 45:
+        tone = "mature and responsible, with bursts of creativity"
     else:
-        st.info("Your sacred spirals will appear here ✨")
+        tone = "wise, reflective, and deeply centered"
 
-# ------------------ Main Area ------------------
-st.image("https://i.imgur.com/YZlVgFy.png", width=100)
-st.title("🌀 Mandala by Mood")
-st.markdown("#### 💭 What's cookin' in your soul today? Let's spin it into sacred geometry!")
+    return f"Age {age} and mood '{emotion}' — this mandala reflects a {tone} vibe. Each swirl mirrors your emotional frequency."
 
-# Input Fields
-openai_api_key = st.text_input("🔐 Your OpenAI API Key", type="password", placeholder="sk-...")
-col1, col2 = st.columns(2)
-with col1:
-    age = st.text_input("🎂 Drop your age vibe", "27", placeholder="e.g. 27")
-with col2:
-    emotion = st.text_input("🌈 What's the feeling?", "happy", placeholder="e.g. blissful, anxious, calm")
+def image_to_bytes(image):
+    buf = BytesIO()
+    image.save(buf, format="PNG")
+    byte_im = buf.getvalue()
+    return byte_im
 
-# Fun interpretations
-def interpret_emotion_age(emotion, age):
-    templates = [
-        f"At {age}, feeling {emotion} means life’s a symphony – love, career, and chaos in perfect rhythm. This mandala echoes harmony from every direction.",
-        f"{emotion.title()} at {age}? You’re probably crushing it or at least pretending well 😎 This pattern reflects the cosmic order you're channeling.",
-        f"Mandala brewed for a {age}-year-old in a {emotion} mood. Spirals of purpose, petals of passion, and symmetry of the soul.",
-        f"Being {age} and feeling {emotion}... that’s some legendary inner alignment. This piece channels that cosmic clarity.",
-    ]
-    return random.choice(templates)
+def get_image_download_link(img):
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    b64 = base64.b64encode(buffered.getvalue()).decode()
+    return f'<a href="data:file/png;base64,{b64}" download="mandala.png"><img src="https://cdn-icons-png.flaticon.com/512/109/109612.png" width="25"/></a>'
 
-# Prompt Creator
-def make_prompt(emotion, age):
-    return f"Black and white symmetrical hand-drawn mandala inspired by a {age}-year-old feeling {emotion}. Intricate, elegant, spiritual, peaceful."
-
-# API Call
-def generate_image(api_key, prompt):
-    url = "https://api.openai.com/v1/images/generations"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    data = {"model": "dall-e-3", "prompt": prompt, "n": 1, "size": "1024x1024"}
-    response = requests.post(url, headers=headers, json=data)
-    if response.status_code == 200:
-        return response.json()["data"][0]["url"]
+# --- GENERATE IMAGE ---
+if submitted:
+    if not api_key or not emotion:
+        st.error("Please enter both your API key and your mood.")
     else:
-        return None
+        with st.spinner("✨ Brewing your mandala..."):
+            try:
+                image, image_url = generate_mandala_image(emotion, age, api_key)
+                caption = get_caption(emotion, age)
 
-# Main Button
-if st.button("✨ Let’s Brew"):
-    if not openai_api_key:
-        st.warning("🚫 Don't forget your magic API key!")
-    else:
-        prompt = make_prompt(emotion, age)
-        st.spinner("Spinning sacred threads into patterns... 🧵")
-        img_url = generate_image(openai_api_key, prompt)
-        if img_url:
-            desc = interpret_emotion_age(emotion, age)
-            st.image(img_url, caption=desc, use_container_width=True)
+                st.image(image, caption=caption, use_column_width=True)
+                st.markdown(get_image_download_link(image), unsafe_allow_html=True)
 
-            # Add to history
-            st.session_state.history.append((prompt, img_url, desc))
+                # Save in chat-like history
+                st.session_state.history.append({
+                    "age": age,
+                    "emotion": emotion,
+                    "image": image,
+                    "caption": caption
+                })
 
-            # Download link
-            response = requests.get(img_url)
-            img_bytes = BytesIO(response.content)
-            b64 = base64.b64encode(img_bytes.getvalue()).decode()
-            st.markdown(f'<a href="data:image/png;base64,{b64}" download="mandala.png">💾 Download This Mandala</a>', unsafe_allow_html=True)
-        else:
-            st.error("💥 Couldn’t brew the mandala! Double-check your API key or usage limits.")
+            except Exception as e:
+                st.error(f"Oops! Something went wrong: {e}")
