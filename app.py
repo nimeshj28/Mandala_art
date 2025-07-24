@@ -2,54 +2,78 @@ import streamlit as st
 import requests
 from PIL import Image
 from io import BytesIO
-import base64
 
-st.set_page_config(page_title="Mandala by Mood", layout="centered", initial_sidebar_state="collapsed")
+# --- Page config ---
+st.set_page_config(page_title="Mandala by Mood", layout="wide", initial_sidebar_state="expanded")
 
+# --- Styling ---
 st.markdown("""
     <style>
     body {
-        background-color: #0f0f0f;
+        background: linear-gradient(135deg, #1f1147 0%, #2e145a 100%);
         color: white;
         font-family: 'Segoe UI', sans-serif;
+    }
+    .stTextInput input {
+        background-color: #2d2d3a;
+        color: white;
+        border-radius: 6px;
+        padding: 0.5rem;
+        font-size: 16px;
     }
     .stButton>button {
         background-color: #ffffff10;
         color: white;
-        border: 1px solid #ffffff20;
+        border: 1px solid #ffffff30;
         padding: 0.5rem 1.5rem;
         border-radius: 8px;
         font-size: 16px;
     }
-    input, textarea {
-        background-color: #1e1e1e !important;
-        color: white !important;
+    .sidebar .sidebar-content {
+        background-color: #191933;
+    }
+    .css-1v3fvcr {
+        background-color: #1e1e2f;
     }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🌌 Mandala by Mood")
-st.markdown("#### 🎭 Create personalized black & white mandala art based on your **emotion** and **age**.")
+# --- Logo / Fun Sketch ---
+st.image("https://i.imgur.com/YZlVgFy.png", width=150)  # Cute sketchy wizard with paintbrush
 
-# --- Store history in session ---
+st.title("🌀 Mandala by Mood")
+st.markdown("### ✨ Yo Art Wizard! Ready to summon a sacred circle based on your **feels** and **age vibe**? Let's go!")
+
+# --- Session State ---
 if 'history' not in st.session_state:
-    st.session_state['history'] = []
+    st.session_state.history = []
 
-# --- API key input ---
-openai_api_key = st.text_input("🔐 Enter your OpenAI API Key", type="password", help="You need your own API key from platform.openai.com")
+# --- Sidebar for Past Chats ---
+with st.sidebar:
+    st.header("🧾 Past Mandalas")
+    if st.session_state['history']:
+        for i, (prompt, url) in enumerate(reversed(st.session_state['history'])):
+            st.markdown(f"**Mandala #{len(st.session_state['history']) - i}**")
+            st.image(url, caption=prompt, use_container_width=True)
+            st.markdown("---")
+    else:
+        st.info("No art spells yet, wizard.")
 
-# --- Friendly inputs ---
+# --- User Input ---
+st.subheader("🪄 Your Mandala Spell Inputs")
+openai_api_key = st.text_input("🔐 Drop Your Secret Spellbook (API Key)", type="password")
+
 col1, col2 = st.columns(2)
 with col1:
-    age = st.text_input("🧒 Your Age", "25")
+    age = st.text_input("🎂 Age you're rocking", "25")
 with col2:
-    emotion = st.text_input("🎨 Your Current Emotion", "peaceful")
+    emotion = st.text_input("💫 What’s the current vibe?", "peaceful")
 
-# --- Prompt formatting ---
-def create_prompt(emotion, age):
-    return f"Detailed black and white symmetrical mandala art, inspired by the emotion '{emotion}' and the inner world of a {age}-year-old. Highly artistic, vector style, crisp lines, zen feeling."
+# --- Prompt Generator ---
+def make_prompt(emotion, age):
+    return f"Detailed black and white symmetrical mandala art, inspired by the emotion '{emotion}' and the perspective of a {age}-year-old. Highly artistic, symmetrical, spiritual pattern, zen feeling."
 
-# --- Generate Mandala using DALL·E ---
+# --- Generate Mandala ---
 def generate_image(api_key, prompt):
     url = "https://api.openai.com/v1/images/generations"
     headers = {
@@ -64,29 +88,20 @@ def generate_image(api_key, prompt):
     }
     response = requests.post(url, headers=headers, json=data)
     if response.status_code == 200:
-        image_url = response.json()['data'][0]['url']
-        return image_url
+        return response.json()['data'][0]['url']
     else:
         return None
 
 # --- Generate Button ---
-if st.button("✨ Create Mandala"):
+if st.button("🎨 Cast the Mandala Spell!"):
     if not openai_api_key:
-        st.warning("Please enter your OpenAI API key.")
+        st.warning("⚠️ Drop that API key first, wizard!")
     else:
-        prompt = create_prompt(emotion, age)
-        with st.spinner("Crafting your mandala..."):
-            image_url = generate_image(openai_api_key, prompt)
-            if image_url:
-                st.image(image_url, caption=f"Mandala for '{emotion}' at age {age}", use_column_width=True)
-                st.session_state.history.append((prompt, image_url))
+        prompt = make_prompt(emotion, age)
+        with st.spinner("✨ Channeling divine patterns..."):
+            img_url = generate_image(openai_api_key, prompt)
+            if img_url:
+                st.image(img_url, caption=f"🧘 Mandala for a {age}-year-old feeling '{emotion}'", use_container_width=True)
+                st.session_state.history.append((prompt, img_url))
             else:
-                st.error("❌ Failed to generate image. Check your API key or quota.")
-
-# --- History Section ---
-if st.session_state['history']:
-    st.markdown("---")
-    st.subheader("🖼️ Your Past Mandalas")
-    for i, (p, url) in enumerate(reversed(st.session_state['history'])):
-        with st.expander(f"Mandala #{len(st.session_state['history']) - i}"):
-            st.image(url, caption=p, use_column_width=True)
+                st.error("❌ Spell fizzled. Check your API key or usage.")
