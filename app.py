@@ -1,139 +1,131 @@
 import streamlit as st
-from PIL import Image
 import openai
-import requests
+import os
 import base64
-import io
+from io import BytesIO
+from datetime import datetime
+import requests
 
-# --- Custom CSS Styling ---
+# ---------- STYLES ----------
+st.set_page_config(page_title="Mandala Generator", layout="wide")
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Montserrat&display=swap');
-
-    html, body, [class*="css"] {
+    body {
+        background-color: #1e1e1e;
+        color: white;
         font-family: 'Montserrat', sans-serif;
     }
-
-    .stApp {
-        background-color: #1a1a1a;
-        color: #f5f5f5;
-    }
-
-    textarea, input[type="text"], input[type="number"] {
-        background-color: #2a2a2a !important;
-        color: #ffffff !important;
-        border-radius: 10px;
-        font-weight: 500;
-        padding: 10px;
-        border: 1px solid #555;
-    }
-
-    label {
-        color: #eeeeee !important;
-    }
-
-    .stButton > button {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        font-weight: bold;
-        border-radius: 10px;
-        padding: 8px 16px;
-    }
-
-    .caption {
-        font-size: 16px;
-        font-style: italic;
-        color: #cccccc;
-        margin-top: 10px;
-    }
-
-    .download-btn {
-        background-color: #3b82f6;
-        border: none;
-        padding: 10px;
-        border-radius: 50%;
-        position: absolute;
-        bottom: 15px;
-        right: 15px;
-        z-index: 10;
-        text-decoration: none;
-        font-size: 20px;
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input {
         color: white;
+        background-color: #333;
     }
-
-    .sidebar .block-container {
-        background-color: #242424;
+    .caption-box {
+        font-style: italic;
+        color: #ccc;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
     }
-
-    .chat-history {
-        font-size: 14px;
-        color: #cccccc;
-    }
-
-    .sidebar-icon {
-        border-left: 3px solid #3b82f6;
-        padding-left: 10px;
-        margin-bottom: 10px;
+    .download-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Initialize Session State ---
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+# ---------- SESSION STATE ----------
+if 'history' not in st.session_state:
+    st.session_state['history'] = []
+if 'api_key' not in st.session_state:
+    st.session_state['api_key'] = ''
 
-# --- Sidebar Chat History ---
-with st.sidebar:
-    st.title("🎨 Past Mandalas")
-    for idx, chat in enumerate(st.session_state.chat_history):
-        with st.expander(f"🌀 {chat['age']} | {chat['emotion'].capitalize()}"):
-            st.image(chat["image"], caption=chat["caption"], use_container_width=True)
+# ---------- FUNCTIONS ----------
+def generate_caption(age, mood):
+    tone = "muted tones and slow floral layers" if "sad" in mood.lower() or "tired" in mood.lower() else \
+           "vibrant colors and blooming symmetry" if "joy" in mood.lower() else \
+           "light patterns and playful symmetry" if int(age) < 20 else \
+           "earthy hues and balanced geometry"
+    return f"Age {age}, feeling {mood.lower()} → {tone}"
 
-# --- Main Input UI ---
-st.markdown("## 🧘 Brew Your Mandala")
-st.markdown("How’s your vibe today? Drop your **mood** and **age**, and we’ll sketch the feeling ✨")
+def generate_mandala(api_key, age, mood):
+    openai.api_key = api_key
+    prompt = f"Generate a calming, symmetrical mandala art inspired by the emotional state '{mood}' for someone aged {age}. Focus on symmetry, texture, colors, and emotional healing."
+    response = openai.images.generate(
+        model="dall-e-3",
+        prompt=prompt,
+        size="1024x1024",
+        quality="standard",
+        n=1,
+    )
+    return response.data[0].url
 
-api_key = st.text_input("🔐 Your OpenAI API Key", type="password")
-age = st.number_input("🎂 Your Age", min_value=5, max_value=100, step=1)
-emotion = st.text_input("💭 Your Mood (e.g. peaceful, excited, nostalgic)")
+def get_image_base64(url):
+    image_data = requests.get(url).content
+    return base64.b64encode(image_data).decode()
 
-if st.button("☕ Let’s Brew"):
-    if not api_key or not emotion or not age:
-        st.warning("Please fill all fields to get your mandala ☝️")
-    else:
-        openai.api_key = api_key
-        with st.spinner("Creating your artistic aura..."):
-            prompt = f"Black and white line art mandala symbolizing {emotion} emotion for a {age}-year-old person. Highly detailed, symmetrical, spiritual tone."
+def download_chat_history():
+    lines = [
+        f"{e['timestamp']} - Age {e['age']} - Mood: {e['mood']}\n{e['caption']}\n{e['image_url']}\n"
+        for e in st.session_state.history
+    ]
+    content = "\n---\n".join(lines)
+    b = BytesIO()
+    b.write(content.encode())
+    b.seek(0)
+    return b
 
-            try:
-                response = openai.images.generate(
-                    model="dall-e-3",
-                    prompt=prompt,
-                    size="1024x1024",
-                    n=1
-                )
-                image_url = response.data[0].url
-                img_data = requests.get(image_url).content
-                image = Image.open(io.BytesIO(img_data))
+# ---------- MAIN APP ----------
+st.markdown("<h1 style='text-align:center;'>🌀 Mandala Generator</h1>", unsafe_allow_html=True)
 
-                # --- Generate Caption ---
-                caption = f"Age {age}, feeling {emotion} – this mandala reflects your moment. Like petals stretching from all directions, your energy is balanced and expressive."
+with st.container():
+    st.markdown("## 🌈 Enter Details to Generate Mandala")
+    with st.form("user_input", clear_on_submit=False):
+        api_key = st.text_input("🔑 Enter your OpenAI API key", type="password", placeholder="sk-...", value=st.session_state['api_key'])
+        age = st.number_input("📅 Your Age", min_value=5, max_value=100, value=25)
+        mood = st.text_input("🌤️ Current Mood", placeholder="e.g. calm, sad, joyful")
+        submitted = st.form_submit_button("Generate Mandala 🎨")
 
-                # --- Save to Chat History ---
-                st.session_state.chat_history.append({
-                    "age": age,
-                    "emotion": emotion,
-                    "caption": caption,
-                    "image": image
-                })
+        if submitted:
+            if not api_key:
+                st.error("Please enter your OpenAI API key.")
+            elif not mood.strip():
+                st.error("Please describe your current mood.")
+            else:
+                st.session_state['api_key'] = api_key
+                with st.spinner("Generating your personalized mandala..."):
+                    try:
+                        image_url = generate_mandala(api_key, age, mood)
+                        caption = generate_caption(age, mood)
+                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        st.session_state.history.insert(0, {
+                            "image_url": image_url,
+                            "caption": caption,
+                            "timestamp": timestamp,
+                            "age": age,
+                            "mood": mood
+                        })
+                        st.success("Mandala generated successfully!")
+                    except Exception as e:
+                        st.error(f"Error generating image: {e}")
 
-                # --- Display Output ---
-                st.image(image, caption=caption, use_container_width=True)
+# ---------- CHAT HISTORY ----------
+st.markdown("---")
+st.markdown("## 🗂️ Your Mandala History")
 
-                # --- Download Button ---
-                b64 = base64.b64encode(img_data).decode()
-                dl_link = f'<a href="data:image/png;base64,{b64}" download="mandala_{age}_{emotion}.png" class="download-btn">⬇️</a>'
-                st.markdown(dl_link, unsafe_allow_html=True)
+if len(st.session_state.history) == 0:
+    st.info("No mandalas generated yet.")
+else:
+    for i, entry in enumerate(st.session_state.history):
+        with st.expander(f"🌀 {entry['timestamp']} | Age {entry['age']} | Mood: {entry['mood'].capitalize()}", expanded=False):
+            st.image(entry["image_url"], caption=entry["caption"], use_column_width=True)
+            base64_img = get_image_base64(entry["image_url"])
+            b64_link = f"data:image/png;base64,{base64_img}"
+            st.markdown(
+                f'<a href="{b64_link}" download="mandala_{i+1}.png" class="download-btn">📥 Download Image</a>',
+                unsafe_allow_html=True
+            )
 
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+# ---------- DOWNLOAD CHAT HISTORY ----------
+st.markdown("---")
+st.download_button("📄 Download Chat History", data=download_chat_history(), file_name="mandala_chat_history.txt", mime="text/plain")
